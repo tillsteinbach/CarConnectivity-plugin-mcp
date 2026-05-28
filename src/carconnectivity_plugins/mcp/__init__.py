@@ -1,0 +1,1 @@
+"""CarConnectivity MCP plugin package."""
