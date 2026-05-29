@@ -66,7 +66,8 @@ class Plugin(BasePlugin):
         self.active_config["ssl_certfile"] = config.get("ssl_certfile")
         self.active_config["ssl_keyfile"] = config.get("ssl_keyfile")
         self.active_config["allow_write"] = config.get("allow_write", False)
-        self.active_config["auth_token"] = config.get("auth_token")
+        self.active_config["client_id"] = config.get("client_id")
+        self.active_config["client_secret"] = config.get("client_secret")
 
         if not isinstance(self.active_config["port"], int) or self.active_config["port"] < 1 or self.active_config["port"] > 65535:
             raise ConfigurationError('Invalid port specified in config ("port" out of range, must be 1-65535)')
@@ -75,10 +76,16 @@ class Plugin(BasePlugin):
             raise ConfigurationError('Invalid path specified in config ("path" must start with "/")')
         if not isinstance(self.active_config["allow_write"], bool):
             raise ConfigurationError('Invalid allow_write specified in config ("allow_write" must be a boolean)')
-        if self.active_config["auth_token"] is not None and (
-            not isinstance(self.active_config["auth_token"], str) or not self.active_config["auth_token"].strip()
+        if self.active_config["client_id"] is not None and (
+            not isinstance(self.active_config["client_id"], str) or not self.active_config["client_id"].strip()
         ):
-            raise ConfigurationError('Invalid auth_token specified in config ("auth_token" must be a non-empty string)')
+            raise ConfigurationError('Invalid client_id specified in config ("client_id" must be a non-empty string)')
+        if self.active_config["client_secret"] is not None and (
+            not isinstance(self.active_config["client_secret"], str) or not self.active_config["client_secret"].strip()
+        ):
+            raise ConfigurationError('Invalid client_secret specified in config ("client_secret" must be a non-empty string)')
+        if bool(self.active_config["client_id"]) != bool(self.active_config["client_secret"]):
+            raise ConfigurationError('Both "client_id" and "client_secret" must be set together to enable authentication')
 
         if not isinstance(self.active_config["https"], bool):
             raise ConfigurationError('Invalid https specified in config ("https" must be a boolean)')
@@ -94,7 +101,8 @@ class Plugin(BasePlugin):
             runtime_state_provider=self._runtime_state,
             log_provider=self._get_recent_logs,
             allow_write=self.active_config["allow_write"],
-            auth_token=self.active_config["auth_token"],
+            client_id=self.active_config["client_id"],
+            client_secret=self.active_config["client_secret"],
         )
 
         LOG.info("Loading MCP plugin with config %s", config_remove_credentials(config))
@@ -153,7 +161,7 @@ class Plugin(BasePlugin):
             "path": self.active_config["path"],
             "https": self.active_config["https"],
             "allow_write": self.active_config["allow_write"],
-            "authentication_enabled": bool(self.active_config["auth_token"]),
+            "authentication_enabled": bool(self.active_config["client_id"] and self.active_config["client_secret"]),
         }
 
     def _get_recent_logs(self, limit: int, contains: Optional[str]) -> list[str]:

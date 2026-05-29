@@ -49,16 +49,17 @@ if TYPE_CHECKING:
     from carconnectivity.carconnectivity import CarConnectivity
 
 
-class _StaticTokenVerifier(TokenVerifier):
-    """Verify a static bearer token configured for the plugin."""
+class _ClientSecretVerifier(TokenVerifier):
+    """Verify a bearer token using a configured client_id / client_secret pair."""
 
-    def __init__(self, expected_token: str) -> None:
+    def __init__(self, client_id: str, client_secret: str) -> None:
         super().__init__()
-        self._expected_token = expected_token
+        self._client_id = client_id
+        self._client_secret = client_secret
 
     async def verify_token(self, token: str) -> Optional[AccessToken]:
-        if hmac.compare_digest(token, self._expected_token):
-            return AccessToken(token=token, client_id="mcp-static-token", scopes=[])
+        if hmac.compare_digest(token, self._client_secret):
+            return AccessToken(token=token, client_id=self._client_id, scopes=[])
         return None
 
 
@@ -82,7 +83,8 @@ class CarConnectivityMCPServer:
         runtime_state_provider: Optional[Callable[[], dict[str, Any]]] = None,
         log_provider: Optional[Callable[[int, Optional[str]], list[str]]] = None,
         allow_write: bool = False,
-        auth_token: Optional[str] = None,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
     ) -> None:
         if mcp_factory is None:
             if FastMCP is None:
@@ -91,7 +93,7 @@ class CarConnectivityMCPServer:
 
         self.car_connectivity: CarConnectivity = car_connectivity
         self._allow_write = allow_write
-        auth_provider = _StaticTokenVerifier(auth_token) if auth_token else None
+        auth_provider = _ClientSecretVerifier(client_id, client_secret) if client_id and client_secret else None
         try:
             self.mcp = mcp_factory(server_name, auth=auth_provider)
         except TypeError:

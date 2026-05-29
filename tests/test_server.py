@@ -158,11 +158,12 @@ def test_read_from_path_serializes_result():
     assert json.loads(response)["value"] == 123
 
 
-def test_configures_auth_provider_if_token_set():
+def test_configures_auth_provider_if_credentials_set():
     server = CarConnectivityMCPServer(
         car_connectivity=FakeCarConnectivity(by_path={}),
         mcp_factory=FakeMCP,
-        auth_token="secret-token",
+        client_id="my-client",
+        client_secret="secret-token",
     )
     assert server.mcp.auth is not None
 
@@ -171,3 +172,17 @@ def test_configures_auth_provider_if_token_set():
         mcp_factory=FakeMCP,
     )
     assert server_without_auth.mcp.auth is None
+
+    server_missing_secret = CarConnectivityMCPServer(
+        car_connectivity=FakeCarConnectivity(by_path={}),
+        mcp_factory=FakeMCP,
+        client_id="my-client",
+    )
+    assert server_missing_secret.mcp.auth is None
+
+    server_missing_id = CarConnectivityMCPServer(
+        car_connectivity=FakeCarConnectivity(by_path={}),
+        mcp_factory=FakeMCP,
+        client_secret="secret-token",
+    )
+    assert server_missing_id.mcp.auth is None

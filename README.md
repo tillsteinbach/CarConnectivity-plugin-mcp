@@ -50,7 +50,8 @@ Add the plugin to your `carconnectivity.json`:
           "path": "/mcp",
           "https": false,
           "allow_write": false,
-          "auth_token": "replace-with-strong-random-token"
+          "client_id": "my-mcp-client",
+          "client_secret": "replace-with-strong-random-secret"
         }
       }
     ]
@@ -66,7 +67,8 @@ Add the plugin to your `carconnectivity.json`:
 - `https`: enable HTTPS for network transports (default: `false`)
 - `ssl_certfile`: path to TLS certificate file (required when `https` is `true`)
 - `ssl_keyfile`: path to TLS private key file (required when `https` is `true`)
-- `auth_token`: optional static bearer token; when set, clients must send an `Authorization` header with the bearer token
+- `client_id`: client identifier for authentication; must be set together with `client_secret`
+- `client_secret`: secret for authentication; when both `client_id` and `client_secret` are set, clients must send an OAuth2 `Authorization` header using the `client_secret` as the access token
 - `allow_write`: set to `true` to allow `set_attribute` and `execute_command` (default: `false`, read-only mode)
 
 By default this plugin runs in **read-only mode**. To allow changing values or executing commands, you must explicitly set `allow_write` to `true`.
