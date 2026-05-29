@@ -1,3 +1,4 @@
+
 # CarConnectivity-plugin-mcp
 
 MCP server plugin for CarConnectivity.
@@ -5,6 +6,11 @@ MCP server plugin for CarConnectivity.
 ## What this plugin currently provides
 
 This plugin exposes the CarConnectivity object tree through generic MCP capabilities.
+
+Examples from Claude Desktop:
+
+
+<img width="600" alt="image" src="https://github.com/user-attachments/assets/05f6d57c-de53-492a-888f-3f152cab5f86" />
 
 ### MCP tools
 
