@@ -79,6 +79,8 @@ class Plugin(BasePlugin):
 
     def startup(self) -> None:
         LOG.info("Starting MCP plugin")
+        self._running = False
+        self.healthy._set_value(value=False)  # pylint: disable=protected-access
         self._server_thread = threading.Thread(
             target=self.server.run,
             kwargs={
@@ -96,6 +98,7 @@ class Plugin(BasePlugin):
 
     def shutdown(self) -> None:
         self._running = False
+        self.healthy._set_value(value=False)  # pylint: disable=protected-access
         self.server.stop()
         if self._server_thread is not None and self._server_thread.is_alive():
             self._server_thread.join(timeout=2)
@@ -113,10 +116,16 @@ class Plugin(BasePlugin):
 
     def _runtime_state(self) -> dict:
         thread_alive = self._server_thread is not None and self._server_thread.is_alive()
+        healthy = bool(getattr(self.healthy, "enabled", False) and getattr(self.healthy, "value", False))
         return {
             "plugin_id": self.plugin_id,
             "running": self._running and thread_alive,
+            "healthy": healthy,
             "server_thread_alive": thread_alive,
+            "transport": self.active_config["transport"],
+            "host": self.active_config["host"],
+            "port": self.active_config["port"],
+            "path": self.active_config["path"],
         }
 
     def _get_recent_logs(self, limit: int, contains: Optional[str]) -> list[str]:
@@ -124,6 +133,15 @@ class Plugin(BasePlugin):
         if contains:
             logs = [line for line in logs if contains in line]
         return logs[-limit:]
+
+    def get_runtime_state(self) -> dict:
+        """Public runtime state accessor used by other plugins such as WebUI."""
+        return self._runtime_state()
+
+    def get_recent_logs(self, limit: int = 200, contains: Optional[str] = None) -> list[str]:
+        """Public log accessor used by other plugins such as WebUI."""
+        bounded_limit = max(1, min(int(limit), 500))
+        return self._get_recent_logs(limit=bounded_limit, contains=contains)
 
 
 class _RingBufferHandler(logging.Handler):

@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+
+{% block header %}
+  <h1>{% block title %}MCP Plugin Status{% endblock %}</h1>
+{% endblock %}
+
+{% block content %}
+<h2>Runtime</h2>
+<table class="table">
+  <tbody>
+    <tr class="{{ 'table-success' if runtime.healthy and runtime.running else 'table-danger' }}">
+      <td>Health</td>
+      <td>{{ 'healthy' if runtime.healthy else 'unhealthy' }}</td>
+    </tr>
+    <tr>
+      <td>Running</td>
+      <td>{{ runtime.running }}</td>
+    </tr>
+    <tr>
+      <td>Server thread alive</td>
+      <td>{{ runtime.server_thread_alive }}</td>
+    </tr>
+    <tr>
+      <td>Transport</td>
+      <td>{{ runtime.transport }}</td>
+    </tr>
+    <tr>
+      <td>Endpoint</td>
+      <td>{{ runtime.host }}:{{ runtime.port }}{{ runtime.path }}</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Recent Logs ({{ log_limit }})</h2>
+<pre>{% for line in logs %}{{ line }}
+{% endfor %}</pre>
+{% endblock %}
