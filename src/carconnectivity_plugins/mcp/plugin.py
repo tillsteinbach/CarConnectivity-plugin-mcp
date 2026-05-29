@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from collections import deque
 import logging
 import threading
 
@@ -46,6 +47,11 @@ class Plugin(BasePlugin):
         )
 
         self._server_thread: Optional[threading.Thread] = None
+        self._running: bool = False
+        self._log_buffer: deque[str] = deque(maxlen=1000)
+        self._log_buffer_handler = _RingBufferHandler(self._log_buffer)
+        self._log_buffer_handler.setLevel(logging.INFO)
+        LOG.addHandler(self._log_buffer_handler)
 
         transport = config.get("transport", "streamable-http")
         valid_transports = {"stdio", "streamable-http", "sse"}
@@ -63,7 +69,11 @@ class Plugin(BasePlugin):
         if not isinstance(self.active_config["path"], str) or not self.active_config["path"].startswith("/"):
             raise ConfigurationError('Invalid path specified in config ("path" must start with "/")')
 
-        self.server = CarConnectivityMCPServer(car_connectivity=car_connectivity)
+        self.server = CarConnectivityMCPServer(
+            car_connectivity=car_connectivity,
+            runtime_state_provider=self._runtime_state,
+            log_provider=self._get_recent_logs,
+        )
 
         LOG.info("Loading MCP plugin with config %s", config_remove_credentials(config))
 
@@ -81,12 +91,15 @@ class Plugin(BasePlugin):
             name="carconnectivity.plugins.mcp-server",
         )
         self._server_thread.start()
+        self._running = True
         self.healthy._set_value(value=True)  # pylint: disable=protected-access
 
     def shutdown(self) -> None:
+        self._running = False
         self.server.stop()
         if self._server_thread is not None and self._server_thread.is_alive():
             self._server_thread.join(timeout=2)
+        LOG.removeHandler(self._log_buffer_handler)
         return super().shutdown()
 
     def get_version(self) -> str:
@@ -97,3 +110,28 @@ class Plugin(BasePlugin):
 
     def get_name(self) -> str:
         return "MCP Plugin"
+
+    def _runtime_state(self) -> dict:
+        thread_alive = self._server_thread is not None and self._server_thread.is_alive()
+        return {
+            "plugin_id": self.plugin_id,
+            "running": self._running and thread_alive,
+            "server_thread_alive": thread_alive,
+        }
+
+    def _get_recent_logs(self, limit: int, contains: Optional[str]) -> list[str]:
+        logs = list(self._log_buffer)
+        if contains:
+            logs = [line for line in logs if contains in line]
+        return logs[-limit:]
+
+
+class _RingBufferHandler(logging.Handler):
+    """Log handler writing formatted log records into a bounded deque."""
+
+    def __init__(self, buffer: deque[str]) -> None:
+        super().__init__()
+        self._buffer = buffer
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self._buffer.append(self.format(record))
