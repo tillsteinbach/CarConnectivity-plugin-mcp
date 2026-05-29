@@ -1,26 +1,34 @@
 # CarConnectivity-plugin-mcp
-MCP Server plugin for CarConnectivity to enable AI agents to retrieve vehicle data and trigger supported vehicle commands.
 
-## What this plugin provides
-This plugin exposes the CarConnectivity object tree through a generic MCP interface and concrete vehicle-focused tools:
+MCP server plugin for CarConnectivity.
 
-- `get_element(path="")`: Read objects, attributes, or commands by CarConnectivity path
-- `set_attribute(path, value)`: Write changeable attributes
-- `execute_command(path, value)`: Execute command elements
-- `list_paths()`, `resolve_path(path)`, `discover_capabilities()`: Discover available paths and whether they are readable/writable/executable
-- `get_vehicles()`, `get_vehicle_status(vin)`: Vehicle-centric read APIs
-- `start_charging(vin)`, `stop_charging(vin)`, `start_climatization(vin)`, `stop_climatization(vin)`, `lock_vehicle(vin)`, `unlock_vehicle(vin)`: Vehicle-centric action tools
-- `get_connector_states()`, `get_plugin_states()`, `get_mcp_server_logs(limit, contains)`: Connector/plugin runtime and bounded log access
-- WebUI integration: if `carconnectivity-plugin-webui` is installed, MCP adds a `/mcp/status` plugin page with runtime health and recent logs
+## What this plugin currently provides
 
-This keeps the server generic across connectors and vehicle brands while still enabling powerful agent workflows.
+This plugin exposes the CarConnectivity object tree through generic MCP capabilities.
+
+### MCP tools
+
+- `set_attribute(path, value)` – write a changeable attribute
+- `execute_command(path, value=None)` – execute a command at a CarConnectivity path
+
+### MCP resources
+
+- `carconnectivity://paths` – list all discovered paths and capabilities
+- `carconnectivity://path/{path}` – get one object/attribute/command as JSON
+- `carconnectivity://mcp/logs{?limit,contains}` – bounded MCP plugin logs
+
+FastMCP `ResourcesAsTools` is enabled, so resources are also callable from clients as tools.
+
+If `carconnectivity-plugin-webui` is installed, MCP also provides a `/mcp/status` WebUI page with runtime health and recent logs.
 
 ## Installation
+
 ```bash
 pip install carconnectivity-plugin-mcp
 ```
 
 ## Configuration
+
 Add the plugin to your `carconnectivity.json`:
 
 ```json
@@ -46,3 +54,31 @@ Add the plugin to your `carconnectivity.json`:
 - `host`: bind host for network transports (default: `127.0.0.1`)
 - `port`: bind port for network transports (default: `41000`)
 - `path`: endpoint path for network transports (default: `/mcp`)
+
+## Using it from Claude Desktop
+
+1. Start CarConnectivity with this plugin enabled.
+2. Install the HTTP-to-stdio bridge:
+
+```bash
+npm install -g mcp-remote
+```
+
+3. Edit your Claude Desktop MCP config:
+   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+   - Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`
+
+4. Add this server entry:
+
+```json
+{
+  "mcpServers": {
+    "carconnectivity": {
+      "command": "mcp-remote",
+      "args": ["http://127.0.0.1:41000/mcp"]
+    }
+  }
+}
+```
+
+5. Restart Claude Desktop.
