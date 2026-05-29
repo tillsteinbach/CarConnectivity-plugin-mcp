@@ -2,11 +2,15 @@
 MCP Server plugin for CarConnectivity to enable AI agents to retrieve vehicle data and trigger supported vehicle commands.
 
 ## What this plugin provides
-This plugin exposes the CarConnectivity object tree through a generic MCP interface with three core tools:
+This plugin exposes the CarConnectivity object tree through a generic MCP interface and concrete vehicle-focused tools:
 
 - `get_element(path="")`: Read objects, attributes, or commands by CarConnectivity path
 - `set_attribute(path, value)`: Write changeable attributes
 - `execute_command(path, value)`: Execute command elements
+- `list_paths()`, `resolve_path(path)`, `discover_capabilities()`: Discover available paths and whether they are readable/writable/executable
+- `get_vehicles()`, `get_vehicle_status(vin)`: Vehicle-centric read APIs
+- `start_charging(vin)`, `stop_charging(vin)`, `start_climatization(vin)`, `stop_climatization(vin)`, `lock_vehicle(vin)`, `unlock_vehicle(vin)`: Vehicle-centric action tools
+- `get_connector_states()`, `get_plugin_states()`, `get_mcp_server_logs(limit, contains)`: Connector/plugin runtime and bounded log access
 
 This keeps the server generic across connectors and vehicle brands while still enabling powerful agent workflows.
 
