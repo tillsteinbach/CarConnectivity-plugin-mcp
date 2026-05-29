@@ -118,7 +118,7 @@ class Plugin(BasePlugin):
         thread_alive = self._server_thread is not None and self._server_thread.is_alive()
         healthy = bool(getattr(self.healthy, "enabled", False) and getattr(self.healthy, "value", False))
         return {
-            "plugin_id": self.plugin_id,
+            "plugin_id": self.id,
             "running": self._running and thread_alive,
             "healthy": healthy,
             "server_thread_alive": thread_alive,
