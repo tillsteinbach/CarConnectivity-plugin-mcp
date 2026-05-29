@@ -15,3 +15,6 @@ venv/
 # Testing
 .pytest_cache/
 .coverage
+
+# setuptools_scm generated version file
+src/carconnectivity_plugins/mcp/_version.py

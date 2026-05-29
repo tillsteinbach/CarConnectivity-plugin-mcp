@@ -14,6 +14,7 @@ class FakeMCP:
     def __init__(self, name: str) -> None:
         self.name = name
         self.tools = {}
+        self.resources = {}
         self.prompts = {}
         self.run = MagicMock()
         self.stop = MagicMock()
@@ -28,6 +29,13 @@ class FakeMCP:
     def prompt(self):
         def decorator(func):
             self.prompts[func.__name__] = func
+            return func
+
+        return decorator
+
+    def resource(self, uri: str | None = None):
+        def decorator(func):
+            self.resources[func.__name__] = {"uri": uri, "func": func}
             return func
 
         return decorator
@@ -113,7 +121,17 @@ def _make_graph_server():
             )
         }
     )
-    root = FakeObject(children={"vehicles": FakeObject(children={"veh-1": vehicle}), "connectors": connectors})
+    plugins = FakeObject(
+        children={
+            "mcp": FakeObject(
+                children={
+                    "running": FakeAttribute(True, is_changeable=False),
+                    "healthy": FakeAttribute(True, is_changeable=False),
+                }
+            )
+        }
+    )
+    root = FakeObject(children={"vehicles": FakeObject(children={"veh-1": vehicle}), "connectors": connectors, "plugins": plugins})
     cc = FakeCarConnectivity(root)
     server = CarConnectivityMCPServer(car_connectivity=cc, mcp_factory=FakeMCP, runtime_state_provider=lambda: {"running": True}, log_provider=lambda limit, contains: ["ok", "error"][0:limit])
     return server, cc
@@ -128,7 +146,8 @@ def patch_types(monkeypatch):
 
 def test_registers_tools():
     server, _ = _make_server(MagicMock())
-    assert {"get_element", "set_attribute", "execute_command"}.issubset(set(server.mcp.tools.keys()))
+    assert {"set_attribute", "execute_command"}.issubset(set(server.mcp.tools.keys()))
+    assert {"get_element", "list_paths", "discover_capabilities"}.issubset(set(server.mcp.resources.keys()))
 
 
 def test_registers_prompts():
@@ -184,8 +203,8 @@ def test_command_executes_generic_command():
 def test_discovery_tools_include_action_metadata_and_templates():
     server, _ = _make_graph_server()
 
-    list_paths = server.mcp.tools["list_paths"]
-    discover_capabilities = server.mcp.tools["discover_capabilities"]
+    list_paths = server.mcp.resources["list_paths"]["func"]
+    discover_capabilities = server.mcp.resources["discover_capabilities"]["func"]
 
     entries = list_paths()
     mileage = next(entry for entry in entries if entry["path"] == "vehicles/veh-1/mileage")
@@ -201,11 +220,12 @@ def test_discovery_tools_include_action_metadata_and_templates():
 def test_vehicle_tools_and_runtime_introspection():
     server, _ = _make_graph_server()
 
-    get_vehicles = server.mcp.tools["get_vehicles"]
-    get_vehicle_status = server.mcp.tools["get_vehicle_status"]
+    get_vehicles = server.mcp.resources["get_vehicles"]["func"]
+    get_vehicle_status = server.mcp.resources["get_vehicle_status"]["func"]
     start_charging = server.mcp.tools["start_charging"]
-    get_runtime_state = server.mcp.tools["get_runtime_state"]
-    get_recent_logs = server.mcp.tools["get_recent_logs"]
+    get_connector_states = server.mcp.resources["get_connector_states"]["func"]
+    get_plugin_states = server.mcp.resources["get_plugin_states"]["func"]
+    get_mcp_server_logs = server.mcp.resources["get_mcp_server_logs"]["func"]
 
     vehicles = get_vehicles()
     assert vehicles[0]["vin"] == "WVWZZZ1JZXW000001"
@@ -216,10 +236,12 @@ def test_vehicle_tools_and_runtime_introspection():
     start_result = start_charging("WVWZZZ1JZXW000001")
     assert start_result["action"] == "start_charging"
 
-    runtime = get_runtime_state()
-    assert runtime["running"] is True
-    assert runtime["connectors"][0]["connector_id"] == "conn-1"
+    connectors = get_connector_states()
+    assert connectors[0]["connector_id"] == "conn-1"
 
-    logs = get_recent_logs(limit=2, contains="error")
+    plugins = get_plugin_states()
+    assert plugins[0]["plugin_id"] == "mcp"
+
+    logs = get_mcp_server_logs(limit=2, contains="error")
     assert logs["limit"] == 2
     assert len(logs["lines"]) <= 2

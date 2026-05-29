@@ -70,13 +70,16 @@ class CarConnectivityMCPServer:
         self._log_provider = provider
 
     def _register_tools(self) -> None:
-        @self.mcp.tool()
-        def get_element(path: str = "") -> Any:
-            """DEPRECATED: return an object, attribute, or command at a CarConnectivity path."""
-            return self.read(path)
+        def resource(template: str):
+            if hasattr(self.mcp, "resource"):
+                try:
+                    return self.mcp.resource(template)
+                except TypeError:
+                    return self.mcp.resource()
+            return self.mcp.tool()
 
-        @self.mcp.tool()
-        def get_resource(path: str = "") -> Any:
+        @resource("carconnectivity://element/{path}")
+        def get_element(path: str = "") -> Any:
             """Read a CarConnectivity resource by path without side effects."""
             return self.read(path)
 
@@ -90,18 +93,18 @@ class CarConnectivityMCPServer:
             """Execute a command by path using the provided argument payload."""
             return self.command(path=path, value=value)
 
-        @self.mcp.tool()
+        @resource("carconnectivity://paths")
         def list_paths() -> list[dict[str, Any]]:
             """List all discovered paths and capabilities."""
             return [self._path_to_dict(meta) for meta in self._collect_paths()]
 
-        @self.mcp.tool()
+        @resource("carconnectivity://path/{path}")
         def resolve_path(path: str) -> dict[str, Any]:
             """Get capability metadata for a specific path."""
             element = self._get_enabled_element(path)
             return self._path_to_dict(self._path_meta(path, element))
 
-        @self.mcp.tool()
+        @resource("carconnectivity://capabilities")
         def discover_capabilities() -> dict[str, Any]:
             """Discover resources grouped by readability, writability and executability."""
             metas = self._collect_paths()
@@ -116,15 +119,9 @@ class CarConnectivityMCPServer:
                         if template is not None
                     }
                 ),
-                "deprecated_tools": [
-                    {
-                        "tool": "get_element",
-                        "replacement": "Use get_resource()",
-                    }
-                ],
             }
 
-        @self.mcp.tool()
+        @resource("carconnectivity://vehicles")
         def get_vehicles() -> list[dict[str, Any]]:
             """Get all vehicles with path and VIN if available."""
             vehicles: list[dict[str, Any]] = []
@@ -140,7 +137,7 @@ class CarConnectivityMCPServer:
                 )
             return vehicles
 
-        @self.mcp.tool()
+        @resource("carconnectivity://vehicles/{vin}/status")
         def get_vehicle_status(vin: str) -> dict[str, Any]:
             """Get status and known action capabilities for a vehicle with a VIN."""
             vehicle_path = self._find_vehicle_path_by_vin(vin)
@@ -189,15 +186,18 @@ class CarConnectivityMCPServer:
             """Unlock a vehicle identified by VIN."""
             return self._execute_vehicle_action(vin=vin, action="unlock_vehicle")
 
-        @self.mcp.tool()
-        def get_runtime_state() -> dict[str, Any]:
-            """Get runtime and connector health information."""
-            payload = self._runtime_state_provider() if self._runtime_state_provider else {"running": True}
-            payload["connectors"] = self._connector_states()
-            return payload
+        @resource("carconnectivity://connectors/states")
+        def get_connector_states() -> list[dict[str, Any]]:
+            """Get connector health/state information."""
+            return self._connector_states()
 
-        @self.mcp.tool()
-        def get_recent_logs(limit: int = 200, contains: Optional[str] = None) -> dict[str, Any]:
+        @resource("carconnectivity://plugins/states")
+        def get_plugin_states() -> list[dict[str, Any]]:
+            """Get plugin health/state information."""
+            return self._plugin_states()
+
+        @resource("carconnectivity://mcp/logs")
+        def get_mcp_server_logs(limit: int = 200, contains: Optional[str] = None) -> dict[str, Any]:
             """Get recent logs with bounded output size."""
             bounded_limit = max(1, min(int(limit), 500))
             lines = self._log_provider(bounded_limit, contains) if self._log_provider is not None else []
@@ -241,8 +241,8 @@ class CarConnectivityMCPServer:
                 {
                     "role": "user",
                     "content": (
-                        "Diagnose plugin and connector health. First call get_runtime_state(), then inspect connector flags. "
-                        "If unhealthy, call get_recent_logs(limit=100, contains='error')."
+                    "Diagnose plugin and connector health. First call get_connector_states() and get_plugin_states(). "
+                    "If unhealthy, call get_mcp_server_logs(limit=100, contains='error')."
                     ),
                 }
             ]
@@ -311,7 +311,7 @@ class CarConnectivityMCPServer:
         }
 
     def _actions_for_meta(self, meta: _PathMeta) -> list[dict[str, Any]]:
-        actions: list[dict[str, Any]] = [{"type": "read", "method": "get_resource", "parameters": [{"name": "path", "const": meta.path}]}]
+        actions: list[dict[str, Any]] = [{"type": "read", "method": "get_element", "parameters": [{"name": "path", "const": meta.path}]}]
         if meta.writable:
             actions.append(
                 {
@@ -421,24 +421,18 @@ class CarConnectivityMCPServer:
         return candidates[action]
 
     def _resolve_vehicle_command(self, vehicle_path: str, action: str) -> str:
+        available_commands = self._vehicle_commands(vehicle_path)
         candidates = self._command_candidates(action)
         for suffix in candidates:
             path = f"{vehicle_path}/{suffix}"
-            try:
-                element = self._get_enabled_element(path)
-            except ValueError:
-                continue
-            if isinstance(element, GenericCommand):
+            if path in available_commands:
                 return path
 
-        valid_suffixes = {candidate.split("/")[-1] for candidate in candidates}
-        for meta in self._collect_paths():
-            if not meta.path.startswith(f"{vehicle_path}/"):
-                continue
-            if not meta.executable:
-                continue
-            if meta.path.split("/")[-1] in valid_suffixes:
-                return meta.path
+        action_tokens = {token for token in action.split("_") if token}
+        for command_path in available_commands:
+            command_tokens = set(command_path.split("/")[-1].split("_"))
+            if action_tokens.issubset(command_tokens):
+                return command_path
         raise ValueError(f"No executable command found for action '{action}' on {vehicle_path}")
 
     def _has_vehicle_command(self, vehicle_path: str, action: str) -> bool:
@@ -456,6 +450,19 @@ class CarConnectivityMCPServer:
         payload["action"] = action
         return payload
 
+    def _vehicle_commands(self, vehicle_path: str) -> list[str]:
+        commands: list[str] = []
+        for meta in self._collect_paths():
+            if not meta.path.startswith(f"{vehicle_path}/"):
+                continue
+            try:
+                element = self._get_enabled_element(meta.path)
+            except ValueError:
+                continue
+            if isinstance(element, GenericCommand):
+                commands.append(meta.path)
+        return sorted(set(commands))
+
     def _connector_states(self) -> list[dict[str, Any]]:
         states: dict[str, dict[str, Any]] = {}
         interesting = {"running", "healthy", "connected", "last_error", "last_update", "state"}
@@ -468,6 +475,19 @@ class CarConnectivityMCPServer:
                 continue
             states.setdefault(connector_id, {"connector_id": connector_id})[field] = self._safe_read_attribute(meta.path)
         return sorted(states.values(), key=lambda entry: str(entry["connector_id"]))
+
+    def _plugin_states(self) -> list[dict[str, Any]]:
+        states: dict[str, dict[str, Any]] = {}
+        interesting = {"running", "healthy", "connected", "last_error", "last_update", "state"}
+        for meta in self._collect_paths():
+            parts = [part for part in meta.path.split("/") if part]
+            if len(parts) < 3 or parts[0] != "plugins":
+                continue
+            plugin_id, field = parts[1], parts[2]
+            if field not in interesting:
+                continue
+            states.setdefault(plugin_id, {"plugin_id": plugin_id})[field] = self._safe_read_attribute(meta.path)
+        return sorted(states.values(), key=lambda entry: str(entry["plugin_id"]))
 
     def run(self, *, transport: str = "streamable-http", host: str = "127.0.0.1", port: int = 41000, path: str = "/mcp") -> None:
         """Run FastMCP with sensible defaults and compatibility fallbacks across versions."""
