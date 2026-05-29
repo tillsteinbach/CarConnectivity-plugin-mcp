@@ -62,6 +62,9 @@ class Plugin(BasePlugin):
         self.active_config["host"] = config.get("host", "127.0.0.1")
         self.active_config["port"] = config.get("port", 41000)
         self.active_config["path"] = config.get("path", "/mcp")
+        self.active_config["https"] = config.get("https", False)
+        self.active_config["ssl_certfile"] = config.get("ssl_certfile")
+        self.active_config["ssl_keyfile"] = config.get("ssl_keyfile")
         self.active_config["allow_write"] = config.get("allow_write", False)
         self.active_config["auth_token"] = config.get("auth_token")
 
@@ -76,6 +79,15 @@ class Plugin(BasePlugin):
             not isinstance(self.active_config["auth_token"], str) or not self.active_config["auth_token"].strip()
         ):
             raise ConfigurationError('Invalid auth_token specified in config ("auth_token" must be a non-empty string)')
+
+        if not isinstance(self.active_config["https"], bool):
+            raise ConfigurationError('Invalid https specified in config ("https" must be a boolean)')
+
+        if self.active_config["https"]:
+            if not isinstance(self.active_config["ssl_certfile"], str) or not self.active_config["ssl_certfile"]:
+                raise ConfigurationError('Invalid ssl_certfile specified in config ("ssl_certfile" must be a non-empty string when "https" is true)')
+            if not isinstance(self.active_config["ssl_keyfile"], str) or not self.active_config["ssl_keyfile"]:
+                raise ConfigurationError('Invalid ssl_keyfile specified in config ("ssl_keyfile" must be a non-empty string when "https" is true)')
 
         self.server = CarConnectivityMCPServer(
             car_connectivity=car_connectivity,
@@ -98,6 +110,9 @@ class Plugin(BasePlugin):
                 "host": self.active_config["host"],
                 "port": self.active_config["port"],
                 "path": self.active_config["path"],
+                "https": self.active_config["https"],
+                "ssl_certfile": self.active_config["ssl_certfile"],
+                "ssl_keyfile": self.active_config["ssl_keyfile"],
             },
             daemon=True,
             name="carconnectivity.plugins.mcp-server",
@@ -136,6 +151,7 @@ class Plugin(BasePlugin):
             "host": self.active_config["host"],
             "port": self.active_config["port"],
             "path": self.active_config["path"],
+            "https": self.active_config["https"],
             "allow_write": self.active_config["allow_write"],
             "authentication_enabled": bool(self.active_config["auth_token"]),
         }
