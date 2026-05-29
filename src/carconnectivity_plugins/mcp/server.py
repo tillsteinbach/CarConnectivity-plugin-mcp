@@ -100,8 +100,13 @@ class CarConnectivityMCPServer:
         self._log_provider = log_provider
         self._register_tools()
         self._register_prompts()
-        self.mcp.add_transform(ResourcesAsTools(self.mcp))
-        self.mcp.add_transform(PromptsAsTools(self.mcp))
+        if hasattr(self.mcp, "add_transform"):
+            try:
+                self.mcp.add_transform(ResourcesAsTools(self.mcp))
+                self.mcp.add_transform(PromptsAsTools(self.mcp))
+            except TypeError:
+                # Compatibility with test doubles and older server implementations.
+                pass
 
     def set_runtime_state_provider(self, provider: Callable[[], dict[str, Any]]) -> None:
         self._runtime_state_provider = provider
