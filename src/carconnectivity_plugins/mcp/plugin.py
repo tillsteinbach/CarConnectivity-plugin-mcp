@@ -65,12 +65,20 @@ class Plugin(BasePlugin):
         self.active_config["https"] = config.get("https", False)
         self.active_config["ssl_certfile"] = config.get("ssl_certfile")
         self.active_config["ssl_keyfile"] = config.get("ssl_keyfile")
+        self.active_config["allow_write"] = config.get("allow_write", False)
+        self.active_config["auth_token"] = config.get("auth_token")
 
         if not isinstance(self.active_config["port"], int) or self.active_config["port"] < 1 or self.active_config["port"] > 65535:
             raise ConfigurationError('Invalid port specified in config ("port" out of range, must be 1-65535)')
 
         if not isinstance(self.active_config["path"], str) or not self.active_config["path"].startswith("/"):
             raise ConfigurationError('Invalid path specified in config ("path" must start with "/")')
+        if not isinstance(self.active_config["allow_write"], bool):
+            raise ConfigurationError('Invalid allow_write specified in config ("allow_write" must be a boolean)')
+        if self.active_config["auth_token"] is not None and (
+            not isinstance(self.active_config["auth_token"], str) or not self.active_config["auth_token"].strip()
+        ):
+            raise ConfigurationError('Invalid auth_token specified in config ("auth_token" must be a non-empty string)')
 
         if not isinstance(self.active_config["https"], bool):
             raise ConfigurationError('Invalid https specified in config ("https" must be a boolean)')
@@ -85,6 +93,8 @@ class Plugin(BasePlugin):
             car_connectivity=car_connectivity,
             runtime_state_provider=self._runtime_state,
             log_provider=self._get_recent_logs,
+            allow_write=self.active_config["allow_write"],
+            auth_token=self.active_config["auth_token"],
         )
 
         LOG.info("Loading MCP plugin with config %s", config_remove_credentials(config))
@@ -142,6 +152,8 @@ class Plugin(BasePlugin):
             "port": self.active_config["port"],
             "path": self.active_config["path"],
             "https": self.active_config["https"],
+            "allow_write": self.active_config["allow_write"],
+            "authentication_enabled": bool(self.active_config["auth_token"]),
         }
 
     def _get_recent_logs(self, limit: int, contains: Optional[str]) -> list[str]:

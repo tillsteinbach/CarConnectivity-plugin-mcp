@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from unittest.mock import MagicMock
+import json
 
 import pytest
 
@@ -11,130 +12,78 @@ from carconnectivity_plugins.mcp.server import CarConnectivityMCPServer
 class FakeMCP:
     """Minimal fake FastMCP implementation used in tests."""
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, auth=None) -> None:
         self.name = name
+        self.auth = auth
         self.tools = {}
         self.resources = {}
-        self.prompts = {}
+        self.transforms = []
         self.run = MagicMock()
         self.stop = MagicMock()
 
-    def tool(self):
+    def tool(self, **_kwargs):
         def decorator(func):
             self.tools[func.__name__] = func
             return func
 
         return decorator
 
-    def prompt(self):
-        def decorator(func):
-            self.prompts[func.__name__] = func
-            return func
-
-        return decorator
-
-    def resource(self, uri: str | None = None):
+    def resource(self, uri: str | None = None, **_kwargs):
         def decorator(func):
             self.resources[func.__name__] = {"uri": uri, "func": func}
             return func
 
         return decorator
 
+    def add_transform(self, transform):
+        self.transforms.append(transform)
+
 
 class FakeAttribute:
-    def __init__(self, value=None, enabled: bool = True, is_changeable: bool = True) -> None:
-        self.enabled = enabled
-        self.is_changeable = is_changeable
+    def __init__(self, path: str, value=None, is_changeable: bool = True) -> None:
+        self._path = path
         self.value = value
+        self.is_changeable = is_changeable
         self.set_value = MagicMock(side_effect=self._set_value)
 
     def _set_value(self, value):
         self.value = value
 
+    def get_absolute_path(self) -> str:
+        return self._path
+
+    def as_json(self) -> str:
+        return json.dumps({"path": self._path, "value": self.value})
+
 
 class FakeCommand:
-    def __init__(self, enabled: bool = True) -> None:
-        self.enabled = enabled
+    def __init__(self, path: str) -> None:
+        self._path = path
         self.set_value = MagicMock()
+
+    def get_absolute_path(self) -> str:
+        return self._path
 
 
 class FakeObject:
-    def __init__(self, payload=None, children=None):
-        self.enabled = True
-        self.payload = payload if payload is not None else {}
-        self.children = children if children is not None else {}
+    def __init__(self, path: str, children=None) -> None:
+        self._path = path
+        self.children = children or []
 
-    def as_dict(self):
-        return self.payload
+    def get_absolute_path(self) -> str:
+        return self._path
 
-    def get_children(self, recursive: bool = False):
-        return list(self.children.items())
+    def as_json(self) -> str:
+        return json.dumps({"path": self._path})
 
 
 class FakeCarConnectivity:
-    def __init__(self, root: FakeObject):
-        self.root = root
-
-    def get_root(self):
-        return self.root
+    def __init__(self, by_path: dict[str, object], children=None) -> None:
+        self._by_path = by_path
+        self.children = children or []
 
     def get_by_path(self, path: str):
-        if path == "":
-            return self.root
-        current = self.root
-        for part in [p for p in path.split("/") if p]:
-            if not isinstance(current, FakeObject):
-                return None
-            current = current.children.get(part)
-            if current is None:
-                return None
-        return current
-
-
-def _make_server(get_by_path):
-    cc = MagicMock()
-    cc.get_by_path = get_by_path
-    return CarConnectivityMCPServer(car_connectivity=cc, mcp_factory=FakeMCP), cc
-
-
-def _make_graph_server():
-    vehicle = FakeObject(
-        children={
-            "vin": FakeAttribute("WVWZZZ1JZXW000001", is_changeable=False),
-            "mileage": FakeAttribute(12345, is_changeable=True),
-            "start_charging": FakeCommand(),
-            "stop_charging": FakeCommand(),
-            "start_climatization": FakeCommand(),
-            "stop_climatization": FakeCommand(),
-            "lock": FakeCommand(),
-            "unlock": FakeCommand(),
-        }
-    )
-    connectors = FakeObject(
-        children={
-            "conn-1": FakeObject(
-                children={
-                    "running": FakeAttribute(True, is_changeable=False),
-                    "healthy": FakeAttribute(True, is_changeable=False),
-                    "last_error": FakeAttribute(None, is_changeable=False),
-                }
-            )
-        }
-    )
-    plugins = FakeObject(
-        children={
-            "mcp": FakeObject(
-                children={
-                    "running": FakeAttribute(True, is_changeable=False),
-                    "healthy": FakeAttribute(True, is_changeable=False),
-                }
-            )
-        }
-    )
-    root = FakeObject(children={"vehicles": FakeObject(children={"veh-1": vehicle}), "connectors": connectors, "plugins": plugins})
-    cc = FakeCarConnectivity(root)
-    server = CarConnectivityMCPServer(car_connectivity=cc, mcp_factory=FakeMCP, runtime_state_provider=lambda: {"running": True}, log_provider=lambda limit, contains: ["ok", "error"][0:limit])
-    return server, cc
+        return self._by_path.get(path)
 
 
 @pytest.fixture(autouse=True)
@@ -144,104 +93,81 @@ def patch_types(monkeypatch):
     monkeypatch.setattr("carconnectivity_plugins.mcp.server.GenericObject", FakeObject)
 
 
-def test_registers_tools():
-    server, _ = _make_server(MagicMock())
-    assert {"set_attribute", "execute_command"}.issubset(set(server.mcp.tools.keys()))
-    assert {"get_element", "list_paths", "discover_capabilities"}.issubset(set(server.mcp.resources.keys()))
+def test_registers_tools_and_resources():
+    server = CarConnectivityMCPServer(car_connectivity=FakeCarConnectivity(by_path={}), mcp_factory=FakeMCP)
+
+    assert {"set_attribute", "execute_command"} == set(server.mcp.tools.keys())
+    assert {"list_paths", "read_from_path", "get_mcp_server_logs"} == set(server.mcp.resources.keys())
 
 
-def test_registers_prompts():
-    server, _ = _make_server(MagicMock())
-    assert {"inspect_vehicle_by_vin", "prepare_vehicle_for_departure", "diagnose_connector_health"}.issubset(set(server.mcp.prompts.keys()))
+def test_set_attribute_requires_explicit_write_access():
+    attribute = FakeAttribute("/vehicles/1/mileage", 123, is_changeable=True)
+    server = CarConnectivityMCPServer(
+        car_connectivity=FakeCarConnectivity(by_path={"/vehicles/1/mileage": attribute}),
+        mcp_factory=FakeMCP,
+    )
+
+    with pytest.raises(PermissionError, match="Write access is disabled"):
+        server.mcp.tools["set_attribute"]("/vehicles/1/mileage", 456)
+
+    attribute.set_value.assert_not_called()
 
 
-def test_read_returns_serialized_object():
-    payload = {"vehicle": "ok"}
-    server, cc = _make_server(MagicMock(return_value=FakeObject(payload=payload)))
+def test_execute_command_requires_explicit_write_access():
+    command = FakeCommand("/vehicles/1/lock")
+    server = CarConnectivityMCPServer(
+        car_connectivity=FakeCarConnectivity(by_path={"/vehicles/1/lock": command}),
+        mcp_factory=FakeMCP,
+    )
 
-    result = server.read("garage")
+    with pytest.raises(PermissionError, match="Write access is disabled"):
+        server.mcp.tools["execute_command"]("/vehicles/1/lock", None)
 
-    assert result == payload
-    cc.get_by_path.assert_called_once_with("garage")
-
-
-def test_read_raises_on_missing_path():
-    server, _ = _make_server(MagicMock(return_value=False))
-
-    with pytest.raises(ValueError, match="Path not found"):
-        server.read("missing")
+    command.set_value.assert_not_called()
 
 
-def test_write_updates_changeable_attribute():
-    attribute = FakeAttribute()
-    server, _ = _make_server(MagicMock(return_value=attribute))
+def test_write_and_command_work_when_enabled():
+    attribute = FakeAttribute("/vehicles/1/mileage", 123, is_changeable=True)
+    command = FakeCommand("/vehicles/1/lock")
+    server = CarConnectivityMCPServer(
+        car_connectivity=FakeCarConnectivity(
+            by_path={
+                "/vehicles/1/mileage": attribute,
+                "/vehicles/1/lock": command,
+            }
+        ),
+        mcp_factory=FakeMCP,
+        allow_write=True,
+    )
 
-    result = server.write(path="a/b", value=42)
+    assert server.mcp.tools["set_attribute"]("/vehicles/1/mileage", 456) is True
+    assert server.mcp.tools["execute_command"]("/vehicles/1/lock", {"state": "lock"}) is True
 
-    attribute.set_value.assert_called_once_with(42)
-    assert result["status"] == "ok"
-
-
-def test_write_rejects_readonly_attribute():
-    attribute = FakeAttribute(is_changeable=False)
-    server, _ = _make_server(MagicMock(return_value=attribute))
-
-    with pytest.raises(ValueError, match="read-only"):
-        server.write(path="a/b", value=42)
-
-
-def test_command_executes_generic_command():
-    command = FakeCommand()
-    server, _ = _make_server(MagicMock(return_value=command))
-
-    result = server.command(path="a/cmd", value={"action": "start"})
-
-    command.set_value.assert_called_once_with({"action": "start"})
-    assert result["status"] == "ok"
+    attribute.set_value.assert_called_once_with(456)
+    command.set_value.assert_called_once_with({"state": "lock"})
 
 
-def test_discovery_tools_include_action_metadata_and_templates():
-    server, _ = _make_graph_server()
+def test_read_from_path_serializes_result():
+    attribute = FakeAttribute("/vehicles/1/mileage", 123, is_changeable=True)
+    server = CarConnectivityMCPServer(
+        car_connectivity=FakeCarConnectivity(by_path={"/vehicles/1/mileage": attribute}),
+        mcp_factory=FakeMCP,
+    )
 
-    list_paths = server.mcp.resources["list_paths"]["func"]
-    discover_capabilities = server.mcp.resources["discover_capabilities"]["func"]
-
-    entries = list_paths()
-    mileage = next(entry for entry in entries if entry["path"] == "vehicles/veh-1/mileage")
-    assert mileage["writable"] is True
-    assert mileage["vehicle_path_template"] == "vehicles/{vin}/mileage"
-    assert any(action["type"] == "write" for action in mileage["actions"])
-
-    discovered = discover_capabilities()
-    assert any(entry["path"] == "vehicles/veh-1/start_charging" for entry in discovered["executable_commands"])
-    assert "vehicles/{vin}/start_charging" in discovered["vehicle_path_templates"]
+    response = server.mcp.resources["read_from_path"]["func"]("vehicles/1/mileage")
+    assert json.loads(response)["value"] == 123
 
 
-def test_vehicle_tools_and_runtime_introspection():
-    server, _ = _make_graph_server()
+def test_configures_auth_provider_if_token_set():
+    server = CarConnectivityMCPServer(
+        car_connectivity=FakeCarConnectivity(by_path={}),
+        mcp_factory=FakeMCP,
+        auth_token="secret-token",
+    )
+    assert server.mcp.auth is not None
 
-    get_vehicles = server.mcp.resources["get_vehicles"]["func"]
-    get_vehicle_status = server.mcp.resources["get_vehicle_status"]["func"]
-    start_charging = server.mcp.tools["start_charging"]
-    get_connector_states = server.mcp.resources["get_connector_states"]["func"]
-    get_plugin_states = server.mcp.resources["get_plugin_states"]["func"]
-    get_mcp_server_logs = server.mcp.resources["get_mcp_server_logs"]["func"]
-
-    vehicles = get_vehicles()
-    assert vehicles[0]["vin"] == "WVWZZZ1JZXW000001"
-
-    status = get_vehicle_status("WVWZZZ1JZXW000001")
-    assert status["capabilities"]["start_charging"] is True
-
-    start_result = start_charging("WVWZZZ1JZXW000001")
-    assert start_result["action"] == "start_charging"
-
-    connectors = get_connector_states()
-    assert connectors[0]["connector_id"] == "conn-1"
-
-    plugins = get_plugin_states()
-    assert plugins[0]["plugin_id"] == "mcp"
-
-    logs = get_mcp_server_logs(limit=2, contains="error")
-    assert logs["limit"] == 2
-    assert len(logs["lines"]) <= 2
+    server_without_auth = CarConnectivityMCPServer(
+        car_connectivity=FakeCarConnectivity(by_path={}),
+        mcp_factory=FakeMCP,
+    )
+    assert server_without_auth.mcp.auth is None
