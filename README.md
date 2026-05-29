@@ -11,6 +11,7 @@ This plugin exposes the CarConnectivity object tree through a generic MCP interf
 - `get_vehicles()`, `get_vehicle_status(vin)`: Vehicle-centric read APIs
 - `start_charging(vin)`, `stop_charging(vin)`, `start_climatization(vin)`, `stop_climatization(vin)`, `lock_vehicle(vin)`, `unlock_vehicle(vin)`: Vehicle-centric action tools
 - `get_connector_states()`, `get_plugin_states()`, `get_mcp_server_logs(limit, contains)`: Connector/plugin runtime and bounded log access
+- WebUI integration: if `carconnectivity-plugin-webui` is installed, MCP adds a `/mcp/status` plugin page with runtime health and recent logs
 
 This keeps the server generic across connectors and vehicle brands while still enabling powerful agent workflows.
 
