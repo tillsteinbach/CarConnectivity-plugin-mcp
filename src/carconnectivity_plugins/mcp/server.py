@@ -196,7 +196,7 @@ class CarConnectivityMCPServer:
             """Get plugin health/state information."""
             return self._plugin_states()
 
-        @resource("carconnectivity://mcp/logs")
+        @self.mcp.tool()
         def get_mcp_server_logs(limit: int = 200, contains: Optional[str] = None) -> dict[str, Any]:
             """Get recent logs with bounded output size."""
             bounded_limit = max(1, min(int(limit), 500))

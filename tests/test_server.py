@@ -146,7 +146,7 @@ def patch_types(monkeypatch):
 
 def test_registers_tools():
     server, _ = _make_server(MagicMock())
-    assert {"set_attribute", "execute_command"}.issubset(set(server.mcp.tools.keys()))
+    assert {"set_attribute", "execute_command", "get_mcp_server_logs"}.issubset(set(server.mcp.tools.keys()))
     assert {"get_element", "list_paths", "discover_capabilities"}.issubset(set(server.mcp.resources.keys()))
 
 
@@ -225,7 +225,7 @@ def test_vehicle_tools_and_runtime_introspection():
     start_charging = server.mcp.tools["start_charging"]
     get_connector_states = server.mcp.resources["get_connector_states"]["func"]
     get_plugin_states = server.mcp.resources["get_plugin_states"]["func"]
-    get_mcp_server_logs = server.mcp.resources["get_mcp_server_logs"]["func"]
+    get_mcp_server_logs = server.mcp.tools["get_mcp_server_logs"]
 
     vehicles = get_vehicles()
     assert vehicles[0]["vin"] == "WVWZZZ1JZXW000001"
