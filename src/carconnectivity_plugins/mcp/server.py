@@ -156,43 +156,7 @@ class CarConnectivityMCPServer:
     def _register_prompts(self) -> None:
         if not hasattr(self.mcp, "prompt"):
             return
-"""
-        @self.mcp.prompt()  # type: ignore[misc]
-        def inspect_vehicle_by_vin(vin: str) -> list[dict[str, str]]:
-            return [
-                {
-                    "role": "user",
-                    "content": (
-                        f"Inspect VIN {vin}. First call discover_capabilities(), then get_vehicle_status(vin). "
-                        "For any state change, verify executable commands before invoking them."
-                    ),
-                }
-            ]
 
-        @self.mcp.prompt()  # type: ignore[misc]
-        def prepare_vehicle_for_departure(vin: str) -> list[dict[str, str]]:
-            return [
-                {
-                    "role": "user",
-                    "content": (
-                        f"Prepare VIN {vin} for departure. Start with discover_capabilities(), then get_vehicle_status(vin). "
-                        "Use start_climatization(vin), stop_charging(vin), and unlock_vehicle(vin) only if commands exist."
-                    ),
-                }
-            ]
-
-        @self.mcp.prompt()  # type: ignore[misc]
-        def diagnose_connector_health() -> list[dict[str, str]]:
-            return [
-                {
-                    "role": "user",
-                    "content": (
-                    "Diagnose plugin and connector health. First call get_connector_states() and get_plugin_states(). "
-                    "If unhealthy, call get_mcp_server_logs(limit=100, contains='error')."
-                    ),
-                }
-            ]
-"""
     def run(self, *, transport: str = "streamable-http", host: str = "127.0.0.1", port: int = 41000, path: str = "/mcp") -> None:
         """Run FastMCP with sensible defaults and compatibility fallbacks across versions."""
         kwargs: dict[str, Any] = {}
