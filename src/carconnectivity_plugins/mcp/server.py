@@ -157,11 +157,24 @@ class CarConnectivityMCPServer:
         if not hasattr(self.mcp, "prompt"):
             return
 
-    def run(self, *, transport: str = "streamable-http", host: str = "127.0.0.1", port: int = 41000, path: str = "/mcp") -> None:
+    def run(
+        self,
+        *,
+        transport: str = "streamable-http",
+        host: str = "127.0.0.1",
+        port: int = 41000,
+        path: str = "/mcp",
+        https: bool = False,
+        ssl_certfile: Optional[str] = None,
+        ssl_keyfile: Optional[str] = None,
+    ) -> None:
         """Run FastMCP with sensible defaults and compatibility fallbacks across versions."""
         kwargs: dict[str, Any] = {}
         if transport != "stdio":
             kwargs = {"host": host, "port": port, "path": path}
+            if https:
+                kwargs["ssl_certfile"] = ssl_certfile
+                kwargs["ssl_keyfile"] = ssl_keyfile
 
         try:
             self.mcp.run(transport=transport, **kwargs)
@@ -169,7 +182,12 @@ class CarConnectivityMCPServer:
             if transport == "stdio":
                 self.mcp.run()
             else:
-                self.mcp.run(**kwargs)
+                try:
+                    self.mcp.run(**kwargs)
+                except TypeError:
+                    kwargs.pop("ssl_certfile", None)
+                    kwargs.pop("ssl_keyfile", None)
+                    self.mcp.run(**kwargs)
 
     def stop(self) -> None:
         """Stop the MCP server if the underlying implementation supports it."""

@@ -62,12 +62,24 @@ class Plugin(BasePlugin):
         self.active_config["host"] = config.get("host", "127.0.0.1")
         self.active_config["port"] = config.get("port", 41000)
         self.active_config["path"] = config.get("path", "/mcp")
+        self.active_config["https"] = config.get("https", False)
+        self.active_config["ssl_certfile"] = config.get("ssl_certfile")
+        self.active_config["ssl_keyfile"] = config.get("ssl_keyfile")
 
         if not isinstance(self.active_config["port"], int) or self.active_config["port"] < 1 or self.active_config["port"] > 65535:
             raise ConfigurationError('Invalid port specified in config ("port" out of range, must be 1-65535)')
 
         if not isinstance(self.active_config["path"], str) or not self.active_config["path"].startswith("/"):
             raise ConfigurationError('Invalid path specified in config ("path" must start with "/")')
+
+        if not isinstance(self.active_config["https"], bool):
+            raise ConfigurationError('Invalid https specified in config ("https" must be a boolean)')
+
+        if self.active_config["https"]:
+            if not isinstance(self.active_config["ssl_certfile"], str) or not self.active_config["ssl_certfile"]:
+                raise ConfigurationError('Invalid ssl_certfile specified in config ("ssl_certfile" must be a non-empty string when "https" is true)')
+            if not isinstance(self.active_config["ssl_keyfile"], str) or not self.active_config["ssl_keyfile"]:
+                raise ConfigurationError('Invalid ssl_keyfile specified in config ("ssl_keyfile" must be a non-empty string when "https" is true)')
 
         self.server = CarConnectivityMCPServer(
             car_connectivity=car_connectivity,
@@ -88,6 +100,9 @@ class Plugin(BasePlugin):
                 "host": self.active_config["host"],
                 "port": self.active_config["port"],
                 "path": self.active_config["path"],
+                "https": self.active_config["https"],
+                "ssl_certfile": self.active_config["ssl_certfile"],
+                "ssl_keyfile": self.active_config["ssl_keyfile"],
             },
             daemon=True,
             name="carconnectivity.plugins.mcp-server",
@@ -126,6 +141,7 @@ class Plugin(BasePlugin):
             "host": self.active_config["host"],
             "port": self.active_config["port"],
             "path": self.active_config["path"],
+            "https": self.active_config["https"],
         }
 
     def _get_recent_logs(self, limit: int, contains: Optional[str]) -> list[str]:

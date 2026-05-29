@@ -47,7 +47,8 @@ Add the plugin to your `carconnectivity.json`:
           "transport": "streamable-http",
           "host": "127.0.0.1",
           "port": 41000,
-          "path": "/mcp"
+          "path": "/mcp",
+          "https": false
         }
       }
     ]
@@ -60,6 +61,9 @@ Add the plugin to your `carconnectivity.json`:
 - `host`: bind host for network transports (default: `127.0.0.1`)
 - `port`: bind port for network transports (default: `41000`)
 - `path`: endpoint path for network transports (default: `/mcp`)
+- `https`: enable HTTPS for network transports (default: `false`)
+- `ssl_certfile`: path to TLS certificate file (required when `https` is `true`)
+- `ssl_keyfile`: path to TLS private key file (required when `https` is `true`)
 
 ## Using it from Claude Desktop
 
