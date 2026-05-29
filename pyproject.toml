@@ -47,3 +47,13 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[project.scripts]
+carconnectivity-mcp = "carconnectivity_mcp.carconnectivity_mcp_base:main"
+
+[tool.pylint.format]
+max-line-length = 160
+ignore-patterns= "_version.py"
+
+[tool.bandit]
+targets = "carconnectivity_mcp, carconnectivity_plugins"
